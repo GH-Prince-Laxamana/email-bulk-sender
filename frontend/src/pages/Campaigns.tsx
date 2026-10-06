@@ -5,9 +5,14 @@ import type { Campaign } from "../types";
 type Props = {
     onCreate: () => void;
     onOpen: (campaign: Campaign) => void;
+    onSettings: () => void;
 };
 
-export default function Campaigns({ onCreate, onOpen }: Props) {
+export default function Campaigns({
+    onCreate,
+    onOpen,
+    onSettings,
+}: Props) {
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -55,6 +60,14 @@ export default function Campaigns({ onCreate, onOpen }: Props) {
                     className="border border-neutral-900 bg-neutral-900 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800"
                 >
                     New campaign
+                </button>
+
+                <button
+                    type="button"
+                    onClick={onSettings}
+                    className="border border-neutral-300 bg-white px-4 py-3 text-sm font-medium hover:bg-neutral-50"
+                >
+                    Settings
                 </button>
             </header>
 

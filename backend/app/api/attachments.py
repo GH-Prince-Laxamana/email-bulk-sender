@@ -10,6 +10,8 @@ from app.storage import repo
 from app.storage.db import transaction
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from app.api.dependencies import get_db
 
 router = APIRouter(tags=["attachments"])
 
@@ -161,3 +163,60 @@ class AttachmentService:
             "folder": folder,
             "filename_template": filename_template,
         }
+
+
+def _error(exc: AttachmentError) -> JSONResponse:
+    if exc.code == "campaign_not_found":
+        status_code = 404
+    elif exc.code in {"campaign_locked", "campaign_running"}:
+        status_code = 409
+    else:
+        status_code = 400
+
+    return JSONResponse(
+        {
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+            }
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/api/campaigns/{campaign_id}/attachments")
+def list_attachments(
+    campaign_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[dict[str, Any]]:
+    try:
+        return AttachmentService(conn).list(campaign_id)
+    except AttachmentError as exc:
+        return _error(exc)
+
+
+@router.put("/api/campaigns/{campaign_id}/attachments")
+def replace_attachments(
+    campaign_id: int,
+    rules: list[dict[str, str | None]],
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[dict[str, Any]]:
+    try:
+        return AttachmentService(conn).replace(
+            campaign_id,
+            rules,
+        )
+    except AttachmentError as exc:
+        return _error(exc)
+
+
+@router.post("/api/paths/check")
+def check_path(
+    payload: dict[str, str],
+) -> dict[str, Any]:
+    try:
+        return AttachmentService.check_path(
+            payload.get("path", ""),
+        )
+    except AttachmentError as exc:
+        return _error(exc)

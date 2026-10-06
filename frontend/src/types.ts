@@ -40,3 +40,34 @@ export type ImportResult = {
   ignored_duplicates: number;
   total_rows: number;
 };
+
+export type RecipientPreview = {
+  recipient_id: number;
+  email: string;
+  subject: string;
+  text: string;
+  html: string;
+};
+
+export type PreviewError = {
+  recipient_id: number;
+  email: string;
+  code: string;
+  message: string;
+};
+
+export type CampaignPreview = {
+  state: "draft" | "previewed";
+  clean: boolean;
+  total: number;
+  valid: number;
+  invalid: number;
+  errors: PreviewError[];
+  previews: RecipientPreview[];
+};
+
+export type AttachmentRule = {
+  path: string | null;
+  folder: string | null;
+  filename_template: string | null;
+};

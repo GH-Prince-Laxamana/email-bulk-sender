@@ -1,19 +1,34 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { Campaign, ImportResult, Recipient } from "../types";
+import type {
+    Campaign,
+    ImportResult,
+    Recipient,
+    RecipientPreview,
+} from "../types";
 
 type Props = {
     campaign: Campaign;
     onBack: () => void;
+    onPreview: (campaign: Campaign) => void;
 };
 
-export default function Recipients({ campaign, onBack }: Props) {
+export default function Recipients({
+    campaign,
+    onBack,
+    onPreview,
+}: Props) {
     const [recipients, setRecipients] = useState<Recipient[]>([]);
     const [text, setText] = useState("");
     const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
     const [message, setMessage] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [previewingId, setPreviewingId] = useState<number | null>(null);
+    const [recipientPreview, setRecipientPreview] =
+        useState<RecipientPreview | null>(null);
+    const [retryingFailed, setRetryingFailed] = useState(false);
+    const [resolvingId, setResolvingId] = useState<number | null>(null);
 
     const editable =
         !campaign.locked &&
@@ -78,6 +93,95 @@ export default function Recipients({ campaign, onBack }: Props) {
             );
         } finally {
             setImporting(false);
+        }
+    }
+
+    async function retryFailed() {
+        try {
+            setRetryingFailed(true);
+            setMessage("");
+
+            const result = await api<{ reset: number }>(
+                `/api/campaigns/${campaign.id}/recipients/retry-failed`,
+                {
+                    method: "POST",
+                },
+            );
+
+            await loadRecipients();
+
+            setMessage(
+                `${result.reset} failed recipient${result.reset === 1 ? "" : "s"} reset to pending.`,
+            );
+        } catch (error) {
+            setMessage(
+                error instanceof Error
+                    ? error.message
+                    : "Could not retry failed recipients.",
+            );
+        } finally {
+            setRetryingFailed(false);
+        }
+    }
+
+    async function resolveInterrupted(
+        recipientId: number,
+        retry: boolean,
+    ) {
+        try {
+            setResolvingId(recipientId);
+            setMessage("");
+
+            await api(
+                `/api/recipients/${recipientId}/resolve`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        retry,
+                    }),
+                },
+            );
+
+            await loadRecipients();
+
+            setMessage(
+                retry
+                    ? "Recipient reset to pending."
+                    : "Recipient marked as sent.",
+            );
+        } catch (error) {
+            setMessage(
+                error instanceof Error
+                    ? error.message
+                    : "Could not resolve interrupted recipient.",
+            );
+        } finally {
+            setResolvingId(null);
+        }
+    }
+
+    async function handleRecipientPreview(recipientId: number) {
+        try {
+            setPreviewingId(recipientId);
+            setRecipientPreview(null);
+            setMessage("");
+
+            const data = await api<RecipientPreview>(
+                `/api/campaigns/${campaign.id}/recipients/${recipientId}/preview`,
+                {
+                    method: "POST",
+                },
+            );
+
+            setRecipientPreview(data);
+        } catch (error) {
+            setMessage(
+                error instanceof Error
+                    ? error.message
+                    : "Could not preview recipient.",
+            );
+        } finally {
+            setPreviewingId(null);
         }
     }
 
@@ -205,40 +309,221 @@ export default function Recipients({ campaign, onBack }: Props) {
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto border-y border-neutral-200 bg-white">
-                        <table className="w-full min-w-170 border-collapse text-left">
-                            <thead>
-                                <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
-                                    <th className="px-5 py-4 font-medium">Email</th>
-                                    <th className="px-5 py-4 font-medium">Variables</th>
-                                    <th className="px-5 py-4 font-medium">Status</th>
-                                </tr>
-                            </thead>
+                    <>
+                        {recipients.some(
+                            (recipient) => recipient.status === "failed",
+                        ) && (
+                                <div className="mb-5 flex items-center justify-between gap-4 border-t border-neutral-200 pt-5">
+                                    <p className="text-sm text-neutral-500">
+                                        Some recipients failed during sending.
+                                    </p>
 
-                            <tbody>
-                                {recipients.map((recipient) => (
-                                    <tr
-                                        key={recipient.id}
-                                        className="border-b border-neutral-100 last:border-0"
+                                    <button
+                                        type="button"
+                                        onClick={() => void retryFailed()}
+                                        disabled={
+                                            retryingFailed ||
+                                            campaign.state === "running"
+                                        }
+                                        className="border border-neutral-300 bg-white px-4 py-3 text-sm font-medium hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                        <td className="px-5 py-4 text-sm">
-                                            {recipient.email}
-                                        </td>
+                                        {retryingFailed
+                                            ? "Retrying..."
+                                            : "Retry failed"}
+                                    </button>
+                                </div>
+                            )}
 
-                                        <td className="px-5 py-4 text-sm text-neutral-500">
-                                            {Object.keys(recipient.values).length}
-                                        </td>
+                        <div className="mb-5 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => onPreview(campaign)}
+                                disabled={campaign.state === "running"}
+                                className="border border-neutral-900 bg-neutral-900 px-4 py-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                Preview campaign
+                            </button>
+                        </div>
 
-                                        <td className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                                            {recipient.status}
-                                        </td>
+                        <div className="overflow-x-auto border-y border-neutral-200 bg-white">
+                            <table className="w-full min-w-170 border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-500">
+                                        <th className="px-5 py-4 font-medium">
+                                            Email
+                                        </th>
+
+                                        <th className="px-5 py-4 font-medium">
+                                            Variables
+                                        </th>
+
+                                        <th className="px-5 py-4 font-medium">
+                                            Status
+                                        </th>
+
+                                        <th className="px-5 py-4 font-medium">
+                                            Actions
+                                        </th>
+
+                                        <th className="px-5 py-4 font-medium"></th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+
+                                <tbody>
+                                    {recipients.map((recipient) => (
+                                        <tr
+                                            key={recipient.id}
+                                            className="border-b border-neutral-100 last:border-0"
+                                        >
+                                            <td className="px-5 py-4 text-sm">
+                                                {recipient.email}
+                                            </td>
+
+                                            <td className="px-5 py-4 text-sm text-neutral-500">
+                                                {Object.keys(recipient.values).length}
+                                            </td>
+
+                                            <td className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                                                {recipient.status}
+                                            </td>
+
+                                            <td className="px-5 py-4">
+                                                {recipient.status === "interrupted" && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                void resolveInterrupted(
+                                                                    recipient.id,
+                                                                    true,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                resolvingId ===
+                                                                recipient.id
+                                                            }
+                                                            className="border border-neutral-300 bg-white px-3 py-2 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
+                                                        >
+                                                            Retry
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                void resolveInterrupted(
+                                                                    recipient.id,
+                                                                    false,
+                                                                )
+                                                            }
+                                                            disabled={
+                                                                resolvingId ===
+                                                                recipient.id
+                                                            }
+                                                            className="border border-neutral-900 bg-neutral-900 px-3 py-2 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+                                                        >
+                                                            Mark as sent
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            <td className="px-5 py-4 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        void handleRecipientPreview(
+                                                            recipient.id,
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        previewingId ===
+                                                        recipient.id
+                                                    }
+                                                    className="border border-neutral-300 bg-white px-3 py-2 text-xs font-medium hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {previewingId === recipient.id
+                                                        ? "Previewing..."
+                                                        : "Preview"}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
                 )}
             </section>
+
+            {recipientPreview && (
+                <section className="mt-8 border border-neutral-300 bg-white p-6 sm:p-8">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                                Recipient preview
+                            </p>
+
+                            <h2 className="mt-3 font-medium">
+                                {recipientPreview.email}
+                            </h2>
+
+                            <p className="mt-1 text-sm text-neutral-600">
+                                {recipientPreview.subject}
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setRecipientPreview(null)}
+                            className="text-sm text-neutral-500 hover:text-neutral-900"
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <iframe
+                        title={`Preview for ${recipientPreview.email}`}
+                        srcDoc={recipientPreview.html}
+                        sandbox=""
+                        className="mt-6 h-96 w-full border border-neutral-200 bg-white"
+                    />
+                </section>
+            )}
+            
+            {recipientPreview && (
+                <section className="mt-8 border border-neutral-300 bg-white p-6 sm:p-8">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                                Recipient preview
+                            </p>
+
+                            <h2 className="mt-3 font-medium">
+                                {recipientPreview.email}
+                            </h2>
+
+                            <p className="mt-1 text-sm text-neutral-600">
+                                {recipientPreview.subject}
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setRecipientPreview(null)}
+                            className="text-sm text-neutral-500 hover:text-neutral-900"
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <iframe
+                        title={`Preview for ${recipientPreview.email}`}
+                        srcDoc={recipientPreview.html}
+                        sandbox=""
+                        className="mt-6 h-96 w-full border border-neutral-200 bg-white"
+                    />
+                </section>
+            )}
         </section>
     );
 }

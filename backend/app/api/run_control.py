@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import get_db
@@ -59,7 +59,7 @@ def _recipient_error(exc: RecipientError) -> JSONResponse:
     )
 
 
-def get_run_control(request) -> RunControlService:
+def get_run_control(request: Request) -> RunControlService:
     return request.app.state.run_control_service
 
 
