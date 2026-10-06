@@ -15,6 +15,9 @@ from app.services.run_control import RunControlService
 from app.services.send_test import TestSendService
 from app.services.settings import SettingsService
 from app.storage.secret_store import default_secret_store
+from app.api.frontend import router as frontend_router
+from fastapi.staticfiles import StaticFiles
+from app.api.frontend import DIST_DIR
 
 
 def create_app(
@@ -22,6 +25,12 @@ def create_app(
     settings_service: SettingsService,
 ) -> FastAPI:
     app = FastAPI()
+
+    app.mount(
+        "/assets",
+        StaticFiles(directory=DIST_DIR / "assets"),
+        name="frontend-assets",
+    )
 
     app.state.settings_service = settings_service
 
@@ -52,6 +61,7 @@ def create_app(
     app.include_router(preview_router)
     app.include_router(run_control_router)
     app.include_router(test_send_router)
+    app.include_router(frontend_router)
 
     @app.get("/api/health")
     def health() -> dict[str, bool]:
