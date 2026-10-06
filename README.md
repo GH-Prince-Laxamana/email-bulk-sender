@@ -19,7 +19,7 @@ A local-first bulk email sender for Gmail. Runs entirely on your machine — no 
 
 ## Requirements
 
-- Python 3.10+
+- **Python 3.10+** — [python.org/downloads](https://www.python.org/downloads/) (`pip` is included)
 - A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) enabled
 
 > Gmail requires 2-Step Verification to be active before App Passwords can be created.
