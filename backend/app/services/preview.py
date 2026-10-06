@@ -109,15 +109,22 @@ class PreviewService:
                 "previews": previews,
             }
 
-        repo.set_state(
-            self._conn,
-            campaign_id,
-            "previewed",
-            None,
+        next_state = (
+            campaign.state
+            if campaign.state == "finished" and not recipients
+            else "previewed"
         )
 
+        if next_state != campaign.state:
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                next_state,
+                None,
+            )
+
         return {
-            "state": "previewed",
+            "state": next_state,
             "clean": True,
             "total": len(recipients),
             "valid": len(previews),

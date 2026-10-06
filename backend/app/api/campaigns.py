@@ -19,6 +19,7 @@ class CampaignResponse(BaseModel):
     state: str
     locked: bool
     halt_reason: str | None
+    counts: dict[str, int]
 
 
 class CreateCampaignRequest(BaseModel):
@@ -84,6 +85,17 @@ def create_campaign(
             body_html=payload.body_html,
             variables=payload.variables,
         )
+    except CampaignError as exc:
+        return _error(exc)
+
+
+@router.delete("/{campaign_id}", status_code=204)
+def delete_campaign(
+    campaign_id: int,
+    service: CampaignService = Depends(get_campaign_service),
+) -> None:
+    try:
+        service.delete(campaign_id)
     except CampaignError as exc:
         return _error(exc)
 

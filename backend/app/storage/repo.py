@@ -415,6 +415,129 @@ def insert_recipients(
     return inserted
 
 
+def update_recipient(
+    conn: sqlite3.Connection,
+    recipient_id: int,
+    *,
+    email: str,
+    values_json: str,
+) -> bool:
+    cursor = conn.execute(
+        """
+        UPDATE recipients
+        SET email = ?,
+            values_json = ?
+        WHERE id = ?
+        """,
+        (
+            email,
+            values_json,
+            recipient_id,
+        ),
+    )
+
+    return cursor.rowcount > 0
+
+
+def get_recipient_campaign_id(
+    conn: sqlite3.Connection,
+    recipient_id: int,
+) -> int | None:
+    row = conn.execute(
+        "SELECT campaign_id FROM recipients WHERE id = ?",
+        (recipient_id,),
+    ).fetchone()
+
+    return int(row["campaign_id"]) if row else None
+
+
+def delete_recipient(
+    conn: sqlite3.Connection,
+    recipient_id: int,
+) -> bool:
+    cursor = conn.execute(
+        "DELETE FROM recipients WHERE id = ?",
+        (recipient_id,),
+    )
+
+    return cursor.rowcount > 0
+
+
+def recipient_exists_for_campaign(
+    conn: sqlite3.Connection,
+    campaign_id: int,
+    email: str,
+    *,
+    exclude_recipient_id: int | None = None,
+) -> bool:
+    if exclude_recipient_id is None:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM recipients
+            WHERE campaign_id = ?
+              AND email = ? COLLATE NOCASE
+            LIMIT 1
+            """,
+            (campaign_id, email),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM recipients
+            WHERE campaign_id = ?
+              AND email = ? COLLATE NOCASE
+              AND id != ?
+            LIMIT 1
+            """,
+            (campaign_id, email, exclude_recipient_id),
+        ).fetchone()
+
+    return row is not None
+
+
+def insert_recipient(
+    conn: sqlite3.Connection,
+    campaign_id: int,
+    *,
+    email: str,
+    values_json: str,
+) -> int:
+    row = conn.execute(
+        """
+        SELECT COALESCE(MAX(position), -1) + 1 AS position
+        FROM recipients
+        WHERE campaign_id = ?
+        """,
+        (campaign_id,),
+    ).fetchone()
+
+    position = int(row["position"])
+
+    cursor = conn.execute(
+        """
+        INSERT INTO recipients (
+            campaign_id,
+            email,
+            values_json,
+            status,
+            attempts,
+            position
+        )
+        VALUES (?, ?, ?, 'pending', 0, ?)
+        """,
+        (
+            campaign_id,
+            email,
+            values_json,
+            position,
+        ),
+    )
+
+    return int(cursor.lastrowid)
+
+
 def retry_failed(
     conn: sqlite3.Connection,
     campaign_id: int,
@@ -474,3 +597,13 @@ def replace_attachment_rules(
                     position,
                 ),
             )
+
+
+def delete_campaign(
+    conn: sqlite3.Connection,
+    campaign_id: int,
+) -> None:
+    conn.execute(
+        "DELETE FROM campaigns WHERE id = ?",
+        (campaign_id,),
+    )

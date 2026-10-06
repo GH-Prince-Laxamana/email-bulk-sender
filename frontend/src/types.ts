@@ -14,6 +14,7 @@ export type Campaign = {
   state: "draft" | "previewed" | "running" | "paused" | "finished";
   locked: boolean;
   halt_reason: string | null;
+  counts: Record<string, number>;
 };
 
 export type RecipientStatus =
@@ -57,7 +58,7 @@ export type PreviewError = {
 };
 
 export type CampaignPreview = {
-  state: "draft" | "previewed";
+  state: Campaign["state"];
   clean: boolean;
   total: number;
   valid: number;

@@ -4,6 +4,7 @@ import csv
 import io
 import sqlite3
 from typing import Any
+import json
 
 from app.storage import repo
 from app.storage.db import transaction
@@ -30,6 +31,11 @@ class RecipientService:
                 campaign_id,
             )
         ]
+
+    def get(self, recipient_id: int) -> dict[str, Any]:
+        recipient = self._require_recipient(recipient_id)
+
+        return self._to_dict(recipient)
 
     def import_csv(
         self,
@@ -58,18 +64,247 @@ class RecipientService:
 
             # Adding recipients is a campaign edit, so a previous preview
             # is no longer valid.
-            if campaign.state != "draft":
-                repo.set_state(
-                    self._conn,
-                    campaign_id,
-                    "draft",
-                    None,
-                )
+            if inserted > 0:
+                if campaign.state == "previewed":
+                    repo.set_state(
+                        self._conn,
+                        campaign_id,
+                        "draft",
+                        None,
+                    )
+                elif campaign.state == "finished":
+                    repo.set_state(
+                        self._conn,
+                        campaign_id,
+                        "paused",
+                        "Recipients were added after campaign finished.",
+                    )
 
         return {
             "inserted": inserted,
             "ignored_duplicates": len(recipients) - inserted,
             "total_rows": len(recipients),
+        }
+
+    def create(
+        self,
+        campaign_id: int,
+        *,
+        email: str,
+        values: dict[str, str] | None = None,
+    ) -> dict:
+        campaign = self._require_campaign(campaign_id)
+
+        if campaign.state == "running":
+            raise RecipientError(
+                "campaign_running",
+                "A running campaign cannot modify recipients.",
+            )
+
+        normalized_email = self._validate_email(email)
+
+        if repo.recipient_exists_for_campaign(
+            self._conn,
+            campaign_id,
+            normalized_email,
+        ):
+            raise RecipientError(
+                "duplicate_recipient",
+                "This email already exists in the campaign.",
+            )
+
+        values_json = json.dumps(
+            self._normalize_values(values or {}),
+            ensure_ascii=False,
+        )
+
+        recipient_id = repo.insert_recipient(
+            self._conn,
+            campaign_id,
+            email=normalized_email,
+            values_json=values_json,
+        )
+
+        if campaign.state == "previewed":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "draft",
+                None,
+            )
+        elif campaign.state == "finished":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "paused",
+                "Recipient was added after campaign finished.",
+            )
+
+        return self.get(recipient_id)
+
+    def update(
+        self,
+        recipient_id: int,
+        *,
+        email: str,
+        values: dict[str, str] | None = None,
+    ) -> dict:
+        recipient = self._require_recipient(recipient_id)
+        campaign_id = repo.get_recipient_campaign_id(
+            self._conn,
+            recipient_id,
+        )
+
+        if campaign_id is None:
+            raise RecipientError(
+                "recipient_not_found",
+                "Recipient not found.",
+            )
+
+        campaign = self._require_campaign(campaign_id)
+
+        if campaign.state == "running":
+            raise RecipientError(
+                "campaign_running",
+                "A running campaign cannot modify recipients.",
+            )
+
+        normalized_email = self._validate_email(email)
+
+        if repo.recipient_exists_for_campaign(
+            self._conn,
+            campaign_id,
+            normalized_email,
+            exclude_recipient_id=recipient_id,
+        ):
+            raise RecipientError(
+                "duplicate_recipient",
+                "This email already exists in the campaign.",
+            )
+
+        normalized_values = self._normalize_values(values or {})
+
+        repo.update_recipient(
+            self._conn,
+            recipient_id,
+            email=normalized_email,
+            values_json=json.dumps(
+                normalized_values,
+                ensure_ascii=False,
+            ),
+        )
+
+        # A changed recipient must be eligible for a fresh send.
+        if recipient.status == "sent":
+            self._reset_recipient_for_edit(
+                recipient_id,
+            )
+
+        if campaign.state == "previewed":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "draft",
+                None,
+            )
+        elif campaign.state == "finished":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "paused",
+                "Recipient changed after campaign finished.",
+            )
+
+        return self.get(recipient_id)
+
+    def delete(self, recipient_id: int) -> None:
+        recipient = self._require_recipient(recipient_id)
+
+        campaign_id = repo.get_recipient_campaign_id(
+            self._conn,
+            recipient_id,
+        )
+
+        if campaign_id is None:
+            raise RecipientError(
+                "recipient_not_found",
+                "Recipient not found.",
+            )
+
+        campaign = self._require_campaign(campaign_id)
+
+        if campaign.state == "running":
+            raise RecipientError(
+                "campaign_running",
+                "A running campaign cannot modify recipients.",
+            )
+
+        deleted = repo.delete_recipient(
+            self._conn,
+            recipient_id,
+        )
+
+        if not deleted:
+            raise RecipientError(
+                "recipient_not_found",
+                "Recipient not found.",
+            )
+
+        if campaign.state == "previewed":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "draft",
+                None,
+            )
+        elif campaign.state == "finished":
+            repo.set_state(
+                self._conn,
+                campaign_id,
+                "paused",
+                "Recipient removed after campaign finished.",
+            )
+
+    def _reset_recipient_for_edit(self, recipient_id: int) -> None:
+        self._conn.execute(
+            """
+            UPDATE recipients
+            SET status = 'pending',
+                error_code = NULL,
+                error_message = NULL,
+                attempts = 0,
+                sent_at = NULL
+            WHERE id = ?
+            """,
+            (recipient_id,),
+        )
+
+    @staticmethod
+    def _validate_email(email: str) -> str:
+        email = email.strip()
+
+        if not email:
+            raise RecipientError(
+                "invalid_email",
+                "Recipient email is required.",
+            )
+
+        if "@" not in email:
+            raise RecipientError(
+                "invalid_email",
+                "Recipient email is invalid.",
+            )
+
+        return email
+
+    @staticmethod
+    def _normalize_values(
+        values: dict[str, str],
+    ) -> dict[str, str]:
+        return {
+            str(key).strip(): str(value).strip()
+            for key, value in values.items()
+            if str(key).strip()
         }
 
     def retry_failed(self, campaign_id: int) -> int:
@@ -142,6 +377,22 @@ class RecipientService:
                 "An interrupted recipient was reset and is ready to retry.",
             )
 
+    def _require_recipient(
+        self,
+        recipient_id: int,
+    ) -> repo.RecipientDetailRow:
+        recipient = repo.get_recipient(
+            self._conn,
+            recipient_id,
+        )
+
+        if recipient is None:
+            raise RecipientError(
+                "recipient_not_found",
+                "Recipient not found.",
+            )
+
+        return recipient
 
     def _require_campaign(self, campaign_id: int) -> repo.CampaignRow:
         campaign = repo.get_campaign(
@@ -159,16 +410,10 @@ class RecipientService:
 
     @staticmethod
     def _ensure_editable(campaign: repo.CampaignRow) -> None:
-        if campaign.locked:
-            raise RecipientError(
-                "campaign_locked",
-                "This campaign has already sent an email and can no longer be edited.",
-            )
-
         if campaign.state == "running":
             raise RecipientError(
                 "campaign_running",
-                "A running campaign cannot be edited.",
+                "Recipients cannot be changed while the campaign is running.",
             )
 
     def _recipient_campaign_id(self, recipient_id: int) -> int:

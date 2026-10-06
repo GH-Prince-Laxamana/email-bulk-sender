@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies import get_db
 from app.services.recipients import RecipientError, RecipientService
@@ -30,6 +30,13 @@ class ImportRecipientsRequest(BaseModel):
     text: str
 
 
+class RecipientRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=1)
+    values: dict[str, str] = Field(default_factory=dict)
+
+
 class ResolveInterruptedRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -46,6 +53,7 @@ def _error(exc: RecipientError) -> JSONResponse:
         "campaign_locked",
         "campaign_running",
         "recipient_not_interrupted",
+        "duplicate_recipient",
     }:
         status_code = 409
     else:
@@ -72,6 +80,59 @@ def list_recipients(
 ) -> list[dict]:
     try:
         return RecipientService(conn).list(campaign_id)
+    except RecipientError as exc:
+        return _error(exc)
+
+
+@router.post(
+    "/api/campaigns/{campaign_id}/recipients",
+    response_model=RecipientResponse,
+    status_code=201,
+)
+def create_recipient(
+    campaign_id: int,
+    payload: RecipientRequest,
+    conn=Depends(get_db),
+) -> dict:
+    try:
+        return RecipientService(conn).create(
+            campaign_id,
+            email=payload.email,
+            values=payload.values,
+        )
+    except RecipientError as exc:
+        return _error(exc)
+
+
+@router.patch(
+    "/api/recipients/{recipient_id}",
+    response_model=RecipientResponse,
+)
+def update_recipient(
+    recipient_id: int,
+    payload: RecipientRequest,
+    conn=Depends(get_db),
+) -> dict:
+    try:
+        return RecipientService(conn).update(
+            recipient_id,
+            email=payload.email,
+            values=payload.values,
+        )
+    except RecipientError as exc:
+        return _error(exc)
+
+
+@router.delete(
+    "/api/recipients/{recipient_id}",
+    status_code=204,
+)
+def delete_recipient(
+    recipient_id: int,
+    conn=Depends(get_db),
+) -> None:
+    try:
+        RecipientService(conn).delete(recipient_id)
     except RecipientError as exc:
         return _error(exc)
 

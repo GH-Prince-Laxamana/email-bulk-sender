@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from app.mail_core.renderer import extract_variables
 from app.storage import repo
 
 
@@ -155,7 +156,19 @@ class CampaignService:
             (campaign.id,),
         ).fetchone()
 
-        variables = json.loads(row["variables"]) if row else []
+        declared_variables = json.loads(row["variables"]) if row else []
+        detected_variables = extract_variables(
+            f"{campaign.subject}\n{campaign.body_html}",
+        )
+        variables = detected_variables or declared_variables
+        counts = {
+            status: count
+            for status, count in self._conn.execute(
+                "SELECT status, COUNT(*) FROM recipients "
+                "WHERE campaign_id = ? GROUP BY status",
+                (campaign.id,),
+            ).fetchall()
+        }
 
         return {
             "id": campaign.id,
@@ -166,4 +179,19 @@ class CampaignService:
             "state": campaign.state,
             "locked": campaign.locked,
             "halt_reason": campaign.halt_reason,
+            "counts": counts,
         }
+
+    def delete(self, campaign_id: int) -> None:
+        campaign = self._require(campaign_id)
+
+        if campaign.state == "running":
+            raise CampaignError(
+                "campaign_running",
+                "A running campaign cannot be deleted.",
+            )
+
+        repo.delete_campaign(
+            self._conn,
+            campaign_id,
+        )

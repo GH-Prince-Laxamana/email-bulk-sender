@@ -8,8 +8,18 @@ from typing import Iterator
 
 
 def connect(path: str | Path) -> sqlite3.Connection:
-    """Open a new connection. Use one per thread; never share across threads."""
-    conn = sqlite3.connect(str(path), timeout=5, isolation_level=None)
+    """Open a connection compatible with FastAPI's sync dependency cleanup.
+
+    FastAPI may execute a synchronous dependency's cleanup in a different
+    worker thread than the one that created the connection. The connection is
+    still request-scoped and is not shared between concurrent requests.
+    """
+    conn = sqlite3.connect(
+        str(path),
+        timeout=5,
+        isolation_level=None,
+        check_same_thread=False,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
