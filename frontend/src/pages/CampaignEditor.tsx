@@ -7,12 +7,14 @@ type Props = {
     campaign?: Campaign;
     onSaved: (campaign: Campaign) => void;
     onBack: () => void;
+    onRecipients: (campaign: Campaign) => void;
 };
 
 export default function CampaignEditor({
     campaign,
     onSaved,
     onBack,
+    onRecipients,
 }: Props) {
     const [name, setName] = useState(campaign?.name ?? "");
     const [subject, setSubject] = useState(campaign?.subject ?? "");
@@ -176,6 +178,16 @@ export default function CampaignEditor({
                     >
                         {saving ? "Saving..." : "Save campaign"}
                     </button>
+
+                    {campaign && (
+                        <button
+                            type="button"
+                            onClick={() => onRecipients(campaign)}
+                            className="border border-neutral-300 bg-white px-4 py-3 text-sm font-medium"
+                        >
+                            Recipients
+                        </button>
+                    )}
 
                     <button
                         type="button"

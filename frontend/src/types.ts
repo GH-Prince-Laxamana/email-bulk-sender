@@ -16,3 +16,27 @@ export type Campaign = {
   halt_reason: string | null;
 };
 
+export type RecipientStatus =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "interrupted";
+
+export type Recipient = {
+  id: number;
+  email: string;
+  values: Record<string, string>;
+  status: RecipientStatus;
+  error_code: string | null;
+  error_message: string | null;
+  attempts: number;
+  sent_at: string | null;
+  position: number;
+};
+
+export type ImportResult = {
+  inserted: number;
+  ignored_duplicates: number;
+  total_rows: number;
+};

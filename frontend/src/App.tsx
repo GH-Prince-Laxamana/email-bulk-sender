@@ -2,11 +2,13 @@ import { useState } from "react";
 import type { Campaign } from "./types";
 import CampaignEditor from "./pages/CampaignEditor";
 import Campaigns from "./pages/Campaigns";
+import Recipients from "./pages/Recipients";
 
 type View =
     | { type: "campaigns" }
     | { type: "create-campaign" }
-    | { type: "edit-campaign"; campaign: Campaign };
+    | { type: "edit-campaign"; campaign: Campaign }
+    | { type: "recipients"; campaign: Campaign };
 
 export default function App() {
     const [view, setView] = useState<View>({
@@ -23,6 +25,12 @@ export default function App() {
                         campaign,
                     });
                 }}
+                onRecipients={(campaign) =>
+                    setView({
+                        type: "recipients",
+                        campaign,
+                    })
+                }
             />
         );
     }
@@ -38,6 +46,26 @@ export default function App() {
                         campaign,
                     });
                 }}
+                onRecipients={(campaign) =>
+                    setView({
+                        type: "recipients",
+                        campaign,
+                    })
+                }
+            />
+        );
+    }
+
+    if (view.type === "recipients") {
+        return (
+            <Recipients
+                campaign={view.campaign}
+                onBack={() =>
+                    setView({
+                        type: "edit-campaign",
+                        campaign: view.campaign,
+                    })
+                }
             />
         );
     }
