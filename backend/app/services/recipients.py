@@ -45,6 +45,12 @@ class RecipientService:
         campaign = self._require_campaign(campaign_id)
         self._ensure_editable(campaign)
 
+        if campaign.locked:
+            raise RecipientError(
+                "campaign_locked",
+                "Cannot import recipients because the campaign is locked.",
+            )
+
         rows = self._parse_csv(text)
 
         if not rows:
