@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local application data
+data/
+*.db
+*.db-shm
+*.db-wal
+*.bak
+
+# Secret store fallback
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Frontend build caches
+frontend/.vite/
+frontend/.cache/
+
+# Temporary files
+*.tmp
+*.temp
