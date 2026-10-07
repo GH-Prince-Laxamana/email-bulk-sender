@@ -41,9 +41,9 @@ def test_blank_value_without_default_is_missing():
         render("Dear {{Name}},", {"Name": ""})
 
 
-def test_html_mode_escapes_values():
+def test_html_mode_preserves_markup_values():
     out = render("<p>{{Name}}</p>", {"Name": "<b>Ana</b> & co"}, RenderMode.HTML)
-    assert out == "<p>&lt;b&gt;Ana&lt;/b&gt; &amp; co</p>"
+    assert out == "<p><b>Ana</b> & co</p>"
 
 
 def test_html_mode_leaves_template_markup_alone():

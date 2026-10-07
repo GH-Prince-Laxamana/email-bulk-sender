@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from html import escape
 from typing import Any, Mapping
 
 # {{ Name }} or {{ Name | default text }}. No braces or pipes inside the name;
@@ -49,7 +48,10 @@ def _clean(value: Any) -> str:
 
 def _sanitize(name: str, value: str, mode: RenderMode) -> str:
     if mode is RenderMode.HTML:
-        return escape(value, quote=True)
+        # Recipient values in an HTML body may contain intentional markup,
+        # such as a link or a formatted callout. The template itself is still
+        # only substituted; values are not evaluated as template expressions.
+        return value
     if mode is RenderMode.TEXT:
         return _NEWLINES.sub(" ", value)
     # FILENAME

@@ -7,7 +7,7 @@ A local-first bulk email sender for Gmail. Runs entirely on your machine — no 
 ## Features
 
 - **Campaign management** — create campaigns with a subject and HTML body
-- **Template variables** — use `{{name}}`, `{{company}}` style placeholders per recipient
+- **Template variables** — use `{{name}}`, `{{company}}` style placeholders per recipient; values in the HTML body may include markup such as links or formatting
 - **CSV import** — paste or upload a CSV of recipients with custom columns
 - **Attachments** — fixed files or per-recipient templated filenames
 - **Preview** — render and review emails before sending
@@ -67,6 +67,19 @@ Credentials are stored in your OS keyring (Windows Credential Manager, macOS Key
 ---
 
 ## How It Works
+
+### HTML body variables
+
+Recipient values are substituted into the HTML body as provided. This means a CSV
+column or manually entered value can contain markup, for example:
+
+```csv
+email,Name,Promo
+alice@example.com,Alice,"<a href=""https://example.com"" target=""_blank"">View your offer</a>"
+```
+
+Use `{{Promo}}` in the HTML body. Subject values remain plain text, while the
+email's plain-text alternative is generated from the rendered HTML.
 
 ```
 run.py

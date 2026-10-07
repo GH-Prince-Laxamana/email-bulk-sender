@@ -29,9 +29,15 @@ def test_builds_text_and_html_versions():
     assert "<b>Ana</b>" in html_of(msg)
 
 
-def test_body_values_are_escaped():
-    msg = build_message(SENDER, CONTENT, [], person(Name="<script>x</script>"))
-    assert "<script>" not in html_of(msg)
+def test_body_values_can_contain_html_markup():
+    msg = build_message(
+        SENDER,
+        CONTENT,
+        [],
+        person(Name='<a href="https://example.com">Ana</a>'),
+    )
+    assert '<b><a href="https://example.com">Ana</a></b>' in html_of(msg)
+    assert "Ana" in msg.get_body(("plain",)).get_content()
 
 
 @pytest.mark.parametrize(
