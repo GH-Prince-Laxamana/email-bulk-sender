@@ -177,7 +177,7 @@ def test_recipient_import_resets_preview_to_draft(db):
     assert campaign.state == "draft"
 
 
-def test_locked_campaign_cannot_import_recipients(db):
+def test_locked_campaign_can_import_recipients(db):
     conn, campaign_id = db
 
     conn.execute(
@@ -187,13 +187,13 @@ def test_locked_campaign_cannot_import_recipients(db):
 
     service = RecipientService(conn)
 
-    with pytest.raises(RecipientError) as exc_info:
-        service.import_csv(
-            campaign_id,
-            "email\nalice@example.com\n",
-        )
+    result = service.import_csv(
+        campaign_id,
+        "email\nalice@example.com\n",
+    )
 
-    assert exc_info.value.code == "campaign_locked"
+    assert result["inserted"] == 1
+    assert service.list(campaign_id)[0]["email"] == "alice@example.com"
 
 
 def test_running_campaign_cannot_import_recipients(db):
