@@ -16,6 +16,15 @@ export async function api<T>(
     path: string,
     options: RequestInit = {},
 ): Promise<T> {
+    const response = await request(path, options);
+    return response.json().catch(() => null) as Promise<T>;
+}
+
+export async function attachmentBlob(path: string): Promise<Blob> {
+    return (await request(path)).blob();
+}
+
+async function request(path: string, options: RequestInit = {}): Promise<Response> {
     const token = getToken();
 
     if (!token) {
@@ -34,9 +43,8 @@ export async function api<T>(
         headers,
     });
 
-    const data = await response.json().catch(() => null);
-
     if (!response.ok) {
+        const data = await response.json().catch(() => null);
         const error = data as ApiError | null;
 
         throw new Error(
@@ -44,5 +52,5 @@ export async function api<T>(
         );
     }
 
-    return data as T;
+    return response;
 }

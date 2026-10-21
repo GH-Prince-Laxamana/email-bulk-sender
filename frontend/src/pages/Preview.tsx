@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import AttachmentPreview from "../components/AttachmentPreview";
 import { api } from "../api";
 import type {
     Campaign,
@@ -11,9 +12,11 @@ type Props = {
     campaign: Campaign;
     onPreviewed: (campaign: Campaign, preview: CampaignPreview) => void;
     onRun: (campaign: Campaign) => void;
+    onEditAttachments: () => void;
+    onEditRecipients: () => void;
 };
 
-export default function Preview({ campaign, onPreviewed, onRun }: Props) {
+export default function Preview({ campaign, onPreviewed, onRun, onEditAttachments, onEditRecipients }: Props) {
     const [preview, setPreview] = useState<CampaignPreview | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -25,23 +28,28 @@ export default function Preview({ campaign, onPreviewed, onRun }: Props) {
     const [starting, setStarting] = useState(false);
     const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
     const [format, setFormat] = useState<"html" | "text">("html");
+    const [openAttachment, setOpenAttachment] = useState<number | null>(null);
+    const inspection = useRef(0);
 
     useEffect(() => {
         void loadReview();
     }, [campaign.id]);
 
     async function inspectRecipient(recipientId: number) {
+        const requestId = ++inspection.current;
         try {
             setSelectedId(recipientId);
+            setRecipientPreview(null);
+            setOpenAttachment(null);
             setLoadingRecipient(true);
             setError("");
-            setRecipientPreview(
-                await api<RecipientPreview>(
+            const data = await api<RecipientPreview>(
                     `/api/campaigns/${campaign.id}/recipients/${recipientId}/preview`,
                     { method: "POST" },
-                ),
-            );
+                );
+            if (requestId === inspection.current) setRecipientPreview(data);
         } catch (err) {
+            if (requestId !== inspection.current) return;
             setRecipientPreview(null);
             setError(
                 err instanceof Error
@@ -49,7 +57,7 @@ export default function Preview({ campaign, onPreviewed, onRun }: Props) {
                     : "Could not preview recipient.",
             );
         } finally {
-            setLoadingRecipient(false);
+            if (requestId === inspection.current) setLoadingRecipient(false);
         }
     }
 
@@ -117,10 +125,14 @@ export default function Preview({ campaign, onPreviewed, onRun }: Props) {
                     </p>
                     <h1 className="mt-3 text-4xl font-semibold tracking-tight">{campaign.name}</h1>
                     <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
-                        See exactly how your message renders for each recipient before sending.
+                        Review each recipient’s message and attached files before sending.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={onEditAttachments}
+                        className="border border-neutral-300 bg-white px-4 py-3 text-sm font-medium hover:border-neutral-900">
+                        {campaign.locked ? "View attachment rules" : "Adjust attachments"}
+                    </button>
                     <button type="button" onClick={() => void runPreview()} disabled={loading}
                         className="border border-neutral-300 bg-white px-4 py-3 text-sm font-medium hover:border-neutral-900 disabled:opacity-50">
                         {loading ? "Refreshing..." : "Refresh review"}
@@ -175,7 +187,7 @@ export default function Preview({ campaign, onPreviewed, onRun }: Props) {
                                 {recipients.map((item) => <button key={item.id} type="button" onClick={() => void inspectRecipient(item.id)}
                                     className={`w-full border-l-2 px-3 py-3 text-left text-sm ${selectedId === item.id ? "border-neutral-900 bg-neutral-50" : "border-transparent hover:bg-neutral-50"}`}>
                                     <span className="block truncate font-medium">{item.email}</span>
-                                    <span className="mt-1 block truncate text-xs uppercase text-neutral-500">{item.status}</span>
+                                    <span className="mt-1 block text-xs text-neutral-600">{preview.previews.find((entry) => entry.recipient_id === item.id)?.attachments.length ?? "—"} files · {item.status}</span>
                                 </button>)}
                                 {!recipients.length && <p className="p-3 text-sm text-neutral-500">No recipients to preview.</p>}
                             </div>
@@ -188,6 +200,26 @@ export default function Preview({ campaign, onPreviewed, onRun }: Props) {
                                         {(["html", "text"] as const).map((item) => <button key={item} type="button" onClick={() => setFormat(item)} className={`px-3 py-2 uppercase ${format === item ? "bg-neutral-900 text-white" : "bg-white text-neutral-500"}`}>{item}</button>)}
                                     </div>
                                 </header>
+                                <section aria-label="Recipient attachments" className="border-b border-neutral-200 px-5 py-5">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <h2 className="text-sm font-semibold">Files for this recipient ({recipientPreview.attachments.length})</h2>
+                                        <button type="button" onClick={onEditAttachments} className="text-sm underline underline-offset-4">{campaign.locked ? "View attachment rules" : "Adjust attachments"}</button>
+                                    </div>
+                                    <p className="mt-2 text-sm leading-6 text-neutral-600">Shared files go to everyone. Templated filenames use this recipient’s values. <button type="button" onClick={onEditRecipients} className="underline underline-offset-4">Review recipient values</button>.</p>
+                                    {recipientPreview.attachments.length === 0 ? <p className="mt-4 text-sm text-neutral-600">No files will be attached to this email.</p> : <ul className="mt-4 divide-y divide-neutral-200">
+                                        {recipientPreview.attachments.map((file, index) => <li key={`${recipientPreview.recipient_id}-${index}`} className="py-4 first:pt-0 last:pb-0">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="break-words text-sm font-medium">{file.filename}</p>
+                                                    <p className="mt-1 break-all text-xs leading-5 text-neutral-600">{file.path}</p>
+                                                    <p className="mt-1 text-xs text-neutral-600">{file.size.toLocaleString()} bytes</p>
+                                                </div>
+                                                <button type="button" aria-expanded={openAttachment === index} onClick={() => setOpenAttachment(openAttachment === index ? null : index)} className="border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50">{openAttachment === index ? "Close preview" : "Preview file"}</button>
+                                            </div>
+                                            {openAttachment === index && <AttachmentPreview endpoint={`/api/campaigns/${campaign.id}/recipients/${recipientPreview.recipient_id}/attachments/${index}`} filename={file.filename} />}
+                                        </li>)}
+                                    </ul>}
+                                </section>
                                 {format === "html" ? <iframe title={`Preview for ${recipientPreview.email}`} srcDoc={recipientPreview.html} sandbox="" className="h-128 w-full bg-white" /> : <pre className="h-128 overflow-auto whitespace-pre-wrap p-6 font-sans text-sm leading-6 text-neutral-700">{recipientPreview.text}</pre>}
                             </> : <p className="p-8 text-sm text-neutral-500">{loadingRecipient ? "Previewing..." : "Select a recipient to view their message."}</p>}
                         </article>

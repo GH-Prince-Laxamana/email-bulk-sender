@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.api.dependencies import get_db
@@ -13,12 +13,19 @@ from app.services.settings import SettingsService
 router = APIRouter(tags=["preview"])
 
 
+class AttachmentPreviewResponse(BaseModel):
+    filename: str
+    path: str
+    size: int
+
+
 class RecipientPreviewResponse(BaseModel):
     recipient_id: int
     email: str
     subject: str
     text: str
     html: str
+    attachments: list[AttachmentPreviewResponse]
 
 
 def _sender_email(request: Request) -> str:
@@ -38,6 +45,7 @@ def _error(exc: PreviewError) -> JSONResponse:
     if exc.code in {
         "campaign_not_found",
         "recipient_not_found",
+        "attachment_not_found",
     }:
         status_code = 404
     elif exc.code == "sender_not_configured":
@@ -74,6 +82,26 @@ def preview_campaign(
     try:
         return _service(request, conn).preview_campaign(
             campaign_id,
+        )
+    except PreviewError as exc:
+        return _error(exc)
+
+
+@router.get("/api/campaigns/{campaign_id}/recipients/{recipient_id}/attachments/{attachment_index}")
+def recipient_attachment(
+    campaign_id: int,
+    recipient_id: int,
+    attachment_index: int,
+    conn=Depends(get_db),
+):
+    try:
+        paths = PreviewService(conn, sender="").recipient_attachments(campaign_id, recipient_id)
+        if attachment_index < 0 or attachment_index >= len(paths):
+            raise PreviewError("attachment_not_found", "Attachment not found for this recipient.")
+        path = paths[attachment_index]
+        return FileResponse(
+            path, filename=path.name, media_type="application/octet-stream",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
     except PreviewError as exc:
         return _error(exc)

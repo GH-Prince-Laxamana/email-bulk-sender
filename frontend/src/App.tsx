@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Campaign } from "./types";
 import CampaignEditor from "./pages/CampaignEditor";
 import Campaigns from "./pages/Campaigns";
@@ -11,7 +11,7 @@ import CampaignWorkspace from "./components/CampaignWorkspace";
 type View =
     | { type: "campaigns" }
     | { type: "create-campaign" }
-    | { type: "edit-campaign"; campaign: Campaign }
+    | { type: "edit-campaign"; campaign: Campaign; focusAttachments?: boolean }
     | { type: "recipients"; campaign: Campaign }
     | { type: "preview"; campaign: Campaign }
     | { type: "settings" }
@@ -22,6 +22,11 @@ export default function App() {
         type: "campaigns",
     });
     const [composeDirty, setComposeDirty] = useState(false);
+    useEffect(() => {
+        if (view.type === "edit-campaign" && view.focusAttachments) {
+            document.getElementById("attachments")?.scrollIntoView({ block: "start" });
+        }
+    }, [view]);
 
     if (view.type === "create-campaign") {
         return (
@@ -174,6 +179,8 @@ export default function App() {
             >
                 <Preview
                     campaign={view.campaign}
+                    onEditAttachments={() => setView({ type: "edit-campaign", campaign: view.campaign, focusAttachments: true })}
+                    onEditRecipients={() => setView({ type: "recipients", campaign: view.campaign })}
                     onPreviewed={(campaign) => {
                         setView({
                             type: "preview",

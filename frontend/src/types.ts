@@ -48,6 +48,7 @@ export type RecipientPreview = {
   subject: string;
   text: string;
   html: string;
+  attachments: { filename: string; path: string; size: number }[];
 };
 
 export type PreviewError = {

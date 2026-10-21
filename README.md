@@ -10,7 +10,7 @@ A local-first bulk email sender for Gmail. Runs entirely on your machine — no 
 - **Template variables** — use `{{name}}`, `{{company}}` style placeholders per recipient; values in the HTML body may include markup such as links or formatting
 - **CSV import** — paste or upload a CSV of recipients with custom columns
 - **Attachments** — fixed files or per-recipient templated filenames
-- **Preview** — render and review emails before sending
+- **Preview** — review each recipient’s email and resolved attachment names, paths, and sizes; preview PDFs, images, and text files, or download other formats
 - **Send controls** — start, pause, and resume campaigns; daily cap protection
 - **Test send** — send a test email to yourself before going live
 - **Secure by default** — token-authenticated, localhost-only API
@@ -80,6 +80,16 @@ alice@example.com,Alice,"<a href=""https://example.com"" target=""_blank"">View 
 
 Use `{{Promo}}` in the HTML body. Subject values remain plain text, while the
 email's plain-text alternative is generated from the rendered HTML.
+
+### Review recipient files
+
+Open a campaign’s **Preview** tab and select a recipient. **Files for this recipient**
+shows the files selected by the same rules used when sending. Choose **Preview file**
+to inspect or download a file. **Adjust attachments** opens **Compose → Attachments**
+to change shared file paths or templated filenames; **Review recipient values** opens
+the recipient list to change the values used in those filenames. Save changes and
+return to Preview to check again. Files are read from disk, so their contents can
+change between previewing and sending.
 
 ```
 run.py

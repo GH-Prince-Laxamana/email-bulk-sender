@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any
 
 from app.mail_core.builder import (
@@ -10,6 +11,7 @@ from app.mail_core.builder import (
     Content,
     Recipient,
     build_message,
+    resolve_attachments,
 )
 from app.storage import repo
 
@@ -78,6 +80,7 @@ class PreviewService:
                         recipient.id,
                         recipient.email,
                         message,
+                        resolve_attachments(rules, recipient.values),
                     )
                 )
             except BuildError as exc:
@@ -188,7 +191,18 @@ class PreviewService:
             recipient.id,
             recipient.email,
             message,
+            resolve_attachments(rules, recipient.values),
         )
+
+    def recipient_attachments(self, campaign_id: int, recipient_id: int) -> list[Path]:
+        self._require_campaign(campaign_id)
+        recipient = repo.get_recipient(self._conn, recipient_id)
+        if recipient is None or self._recipient_campaign_id(recipient_id) != campaign_id:
+            raise PreviewError("recipient_not_found", "Recipient not found for this campaign.")
+        try:
+            return resolve_attachments(self._attachment_rules(campaign_id), recipient.values)
+        except BuildError as exc:
+            raise PreviewError(exc.code, str(exc)) from exc
 
     def _require_campaign(self, campaign_id: int) -> repo.CampaignRow:
         campaign = repo.get_campaign(
@@ -242,6 +256,7 @@ class PreviewService:
         recipient_id: int,
         email: str,
         message: EmailMessage,
+        paths: list[Path],
     ) -> dict[str, Any]:
         html_part = message.get_body(
             preferencelist=("html",),
@@ -256,4 +271,8 @@ class PreviewService:
             "subject": str(message["Subject"] or ""),
             "text": text_part.get_content() if text_part else "",
             "html": html_part.get_content() if html_part else "",
+            "attachments": [
+                {"filename": path.name, "path": str(path), "size": path.stat().st_size}
+                for path in paths
+            ],
         }

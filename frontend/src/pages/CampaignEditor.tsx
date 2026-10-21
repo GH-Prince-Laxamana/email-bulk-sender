@@ -383,13 +383,13 @@ export default function CampaignEditor({
                         </p>
                     </div>
 
-                    <div className="lg:col-start-1 lg:row-start-2">
+                    <div id="attachments" className="scroll-mt-36 lg:col-start-1 lg:row-start-2">
                         <h2 className="text-base font-semibold">
                             Attachments
                         </h2>
 
                         <p className="mt-2 text-sm leading-6 text-neutral-500">
-                            Add a fixed file or generate a filename from recipient variables.
+                            Fixed files go to every recipient. Templated files use each recipient’s values to find their file. Save, then open Preview to check the files for each person.
                         </p>
 
                         {attachmentsLoading ? (
